@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "@/lib/categories";
-
-const GEMINI_MODEL = "gemini-3.6-flash";
+import { callGemini } from "@/lib/gemini";
 
 export async function POST(req: NextRequest) {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -22,46 +21,23 @@ export async function POST(req: NextRequest) {
 
   const categories = type === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [
-            {
-              text: "You categorize accounting transactions. Reply with ONLY the single best-matching category name from the provided list, exactly as written. No explanation.",
-            },
-          ],
-        },
-        contents: [
-          {
-            role: "user",
-            parts: [
-              {
-                text: `Categories: ${categories.join(", ")}\n\nTransaction: "${description}"${
-                  typeof amount === "number" ? ` for $${amount}` : ""
-                }\n\nWhich category fits best?`,
-              },
-            ],
-          },
-        ],
-        // gemini-3.6-flash spends a variable number of tokens "thinking" before
-        // the answer; a low budget can get truncated before any text comes out.
-        generationConfig: { maxOutputTokens: 500, temperature: 0 },
-      }),
-    }
-  );
+  const result = await callGemini({
+    apiKey,
+    system:
+      "You categorize accounting transactions. Reply with ONLY the single best-matching category name from the provided list, exactly as written. No explanation.",
+    parts: [
+      {
+        text: `Categories: ${categories.join(", ")}\n\nTransaction: "${description}"${
+          typeof amount === "number" ? ` for $${amount}` : ""
+        }\n\nWhich category fits best?`,
+      },
+    ],
+  });
 
-  if (!res.ok) {
-    const detail = await res.text();
-    return NextResponse.json({ error: `Gemini request failed: ${detail}` }, { status: 502 });
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error }, { status: 502 });
   }
 
-  const data = await res.json();
-  const text: string = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
-  const category = categories.find((c) => c.toLowerCase() === text.toLowerCase()) ?? "Other";
-
+  const category = categories.find((c) => c.toLowerCase() === result.text.toLowerCase()) ?? "Other";
   return NextResponse.json({ category });
 }

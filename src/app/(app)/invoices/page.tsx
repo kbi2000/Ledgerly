@@ -14,7 +14,7 @@ export default function InvoicesPage() {
           Invoices
         </h1>
         <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-          Create and track client invoices.
+          Create and track client invoices, or describe one in plain English and let AI draft it.
         </p>
       </div>
 

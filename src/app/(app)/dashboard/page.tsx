@@ -2,12 +2,17 @@
 
 import { useMemo, useState } from "react";
 import { useTransactions } from "@/hooks/useTransactions";
+import { useInvoices } from "@/hooks/useInvoices";
 import { StatTile } from "@/components/StatTile";
 import { CashFlowChart, type CashFlowPoint } from "@/components/charts/CashFlowChart";
 import {
   CategoryBreakdownChart,
   type CategoryAmount,
 } from "@/components/charts/CategoryBreakdownChart";
+import { SmartAlerts } from "@/components/SmartAlerts";
+import { AskBooksChat } from "@/components/AskBooksChat";
+import { BusinessAdvisor } from "@/components/BusinessAdvisor";
+import { computeBusinessMetrics } from "@/lib/businessMetrics";
 
 function monthKey(iso: string) {
   return iso.slice(0, 7); // yyyy-mm
@@ -23,6 +28,7 @@ function monthLabel(key: string) {
 
 export default function DashboardPage() {
   const { transactions, loading } = useTransactions();
+  const { invoices } = useInvoices();
   const [insight, setInsight] = useState<string | null>(null);
   const [insightLoading, setInsightLoading] = useState(false);
   const [insightError, setInsightError] = useState<string | null>(null);
@@ -58,6 +64,11 @@ export default function DashboardPage() {
 
     return { totalIncome: income, totalExpense: expense, cashFlow, byCategory };
   }, [transactions]);
+
+  const metrics = useMemo(
+    () => computeBusinessMetrics(transactions, invoices),
+    [transactions, invoices]
+  );
 
   async function generateInsight() {
     setInsightLoading(true);
@@ -119,6 +130,8 @@ export default function DashboardPage() {
         <StatTile label="Total expense" value={totalExpense} icon={<ArrowIcon direction="down" />} />
         <StatTile label="Net" value={net} tone={net >= 0 ? "good" : "bad"} icon={<ScaleIcon />} />
       </div>
+
+      <SmartAlerts transactions={transactions} />
 
       <div
         className="relative overflow-hidden rounded-[var(--radius-lg)] border p-5"
@@ -186,6 +199,10 @@ export default function DashboardPage() {
           <CategoryBreakdownChart data={byCategory} />
         </div>
       </div>
+
+      <BusinessAdvisor metrics={metrics} hasData={transactions.length > 0 || invoices.length > 0} />
+
+      <AskBooksChat transactions={transactions} />
     </div>
   );
 }

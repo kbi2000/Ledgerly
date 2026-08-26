@@ -1,10 +1,22 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { categoriesFor } from "@/lib/categories";
 import type { NewTransaction, TransactionType } from "@/lib/types";
 
 const today = () => new Date().toISOString().slice(0, 10);
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result.slice(result.indexOf(",") + 1));
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 
 export function TransactionForm({
   onSubmit,
@@ -18,7 +30,9 @@ export function TransactionForm({
   const [date, setDate] = useState(today());
   const [submitting, setSubmitting] = useState(false);
   const [categorizing, setCategorizing] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const [aiNote, setAiNote] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   function changeType(next: TransactionType) {
     setType(next);
@@ -48,6 +62,36 @@ export function TransactionForm({
     }
   }
 
+  async function handleScanReceipt(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setScanning(true);
+    setAiNote(null);
+    try {
+      const imageBase64 = await fileToBase64(file);
+      const res = await fetch("/api/scan-receipt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64, mimeType: file.type }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setType("expense");
+        setDescription(data.description);
+        setAmount(String(data.amount));
+        setDate(data.date);
+        setCategory(data.category);
+      } else {
+        setAiNote(data.error ?? "Couldn't read that receipt.");
+      }
+    } catch {
+      setAiNote("Couldn't reach the receipt scanner.");
+    } finally {
+      setScanning(false);
+    }
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!description.trim() || !amount) return;
@@ -74,25 +118,45 @@ export function TransactionForm({
       className="flex flex-col gap-4 rounded-[var(--radius-lg)] border p-5"
       style={{ background: "var(--surface-1)", borderColor: "var(--border)", boxShadow: "var(--shadow-sm)" }}
     >
-      <div
-        className="inline-flex w-fit gap-0.5 rounded-full border p-0.5"
-        style={{ borderColor: "var(--border)" }}
-      >
-        {(["expense", "income"] as const).map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => changeType(t)}
-            className="rounded-full px-3.5 py-1.5 text-xs font-medium capitalize transition-colors"
-            style={
-              type === t
-                ? { background: "var(--brand-gradient)", color: "#ffffff" }
-                : { background: "transparent", color: "var(--text-muted)" }
-            }
-          >
-            {t}
-          </button>
-        ))}
+      <div className="flex items-center justify-between gap-3">
+        <div
+          className="inline-flex w-fit gap-0.5 rounded-full border p-0.5"
+          style={{ borderColor: "var(--border)" }}
+        >
+          {(["expense", "income"] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => changeType(t)}
+              className="rounded-full px-3.5 py-1.5 text-xs font-medium capitalize transition-colors"
+              style={
+                type === t
+                  ? { background: "var(--brand-gradient)", color: "#ffffff" }
+                  : { background: "transparent", color: "var(--text-muted)" }
+              }
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleScanReceipt}
+        />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={scanning}
+          className="flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors disabled:opacity-50"
+          style={{ borderColor: "var(--border)", color: "var(--brand-1)" }}
+        >
+          <CameraIcon />
+          {scanning ? "Scanning…" : "Scan receipt"}
+        </button>
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -177,6 +241,20 @@ export function TransactionForm({
         {submitting ? "Saving…" : "Add transaction"}
       </button>
     </form>
+  );
+}
+
+function CameraIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+      <path
+        d="M2 4.5h1.6l.7-1.3c.1-.2.3-.3.5-.3h4.4c.2 0 .4.1.5.3l.7 1.3H12a1 1 0 0 1 1 1V11a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V5.5a1 1 0 0 1 1-1Z"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+      />
+      <circle cx="7" cy="7.8" r="2.1" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
   );
 }
 

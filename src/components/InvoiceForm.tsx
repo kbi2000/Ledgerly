@@ -4,6 +4,14 @@ import { useState, type FormEvent } from "react";
 import type { InvoiceItem, NewInvoice } from "@/lib/types";
 import { invoiceTotal } from "@/lib/types";
 
+interface InvoiceDraftResponse {
+  clientName: string;
+  clientEmail?: string;
+  items: InvoiceItem[];
+  issueDate: string;
+  dueDate: string;
+}
+
 const today = () => new Date().toISOString().slice(0, 10);
 const inTwoWeeks = () => {
   const d = new Date();
@@ -22,9 +30,40 @@ export function InvoiceForm({ onSubmit }: { onSubmit: (input: NewInvoice) => Pro
   const [dueDate, setDueDate] = useState(inTwoWeeks());
   const [items, setItems] = useState<InvoiceItem[]>([emptyItem()]);
   const [submitting, setSubmitting] = useState(false);
+  const [draftPrompt, setDraftPrompt] = useState("");
+  const [drafting, setDrafting] = useState(false);
+  const [draftError, setDraftError] = useState<string | null>(null);
 
   function updateItem(index: number, patch: Partial<InvoiceItem>) {
     setItems((prev) => prev.map((it, i) => (i === index ? { ...it, ...patch } : it)));
+  }
+
+  async function handleDraftWithAI() {
+    if (!draftPrompt.trim()) return;
+    setDrafting(true);
+    setDraftError(null);
+    try {
+      const res = await fetch("/api/draft-invoice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: draftPrompt }),
+      });
+      const data: InvoiceDraftResponse & { error?: string } = await res.json();
+      if (res.ok) {
+        setClientName(data.clientName);
+        setClientEmail(data.clientEmail ?? "");
+        setItems(data.items.length > 0 ? data.items : [emptyItem()]);
+        setIssueDate(data.issueDate);
+        setDueDate(data.dueDate);
+        setDraftPrompt("");
+      } else {
+        setDraftError(data.error ?? "Couldn't draft that invoice.");
+      }
+    } catch {
+      setDraftError("Couldn't reach the drafting service.");
+    } finally {
+      setDrafting(false);
+    }
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -58,6 +97,40 @@ export function InvoiceForm({ onSubmit }: { onSubmit: (input: NewInvoice) => Pro
       className="flex flex-col gap-4 rounded-[var(--radius-lg)] border p-5"
       style={{ background: "var(--surface-1)", borderColor: "var(--border)", boxShadow: "var(--shadow-sm)" }}
     >
+      <div
+        className="flex flex-col gap-2 rounded-[var(--radius-md)] border p-3 sm:flex-row sm:items-center"
+        style={{ borderColor: "var(--border)", background: "var(--page)" }}
+      >
+        <input
+          value={draftPrompt}
+          onChange={(e) => setDraftPrompt(e.target.value)}
+          placeholder='Describe it: "bill Acme Co for 10 hours design work at $90/hr, due in 2 weeks"'
+          className="flex-1 rounded-[10px] border-0 bg-transparent px-1 py-1 text-sm outline-none"
+          style={{ color: "var(--text-primary)" }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              handleDraftWithAI();
+            }
+          }}
+        />
+        <button
+          type="button"
+          onClick={handleDraftWithAI}
+          disabled={drafting || !draftPrompt.trim()}
+          className="flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] border px-3.5 py-2 text-xs font-medium transition-colors disabled:opacity-50"
+          style={{ borderColor: "var(--border)", color: "var(--brand-1)", background: "var(--surface-1)" }}
+        >
+          <SparkleIcon />
+          {drafting ? "Drafting…" : "Draft with AI"}
+        </button>
+      </div>
+      {draftError && (
+        <p className="text-xs" style={{ color: "var(--status-critical)" }}>
+          {draftError}
+        </p>
+      )}
+
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm">
           <span style={{ color: "var(--text-secondary)" }}>Client name</span>
@@ -113,8 +186,8 @@ export function InvoiceForm({ onSubmit }: { onSubmit: (input: NewInvoice) => Pro
               placeholder="Description"
               value={item.description}
               onChange={(e) => updateItem(i, { description: e.target.value })}
-              className="rounded-md border px-3 py-2 text-sm outline-none"
-              style={{ borderColor: "var(--border)", color: "var(--text-primary)" }}
+              className="rounded-[10px] border px-3.5 py-2.5 text-sm outline-none transition-shadow focus:shadow-[0_0_0_3px_rgba(42,86,214,0.15)]"
+              style={{ borderColor: "var(--border)", color: "var(--text-primary)", background: "var(--page)" }}
             />
             <input
               type="number"
@@ -123,8 +196,8 @@ export function InvoiceForm({ onSubmit }: { onSubmit: (input: NewInvoice) => Pro
               placeholder="Qty"
               value={item.quantity}
               onChange={(e) => updateItem(i, { quantity: Number(e.target.value) })}
-              className="rounded-md border px-3 py-2 text-sm outline-none"
-              style={{ borderColor: "var(--border)", color: "var(--text-primary)" }}
+              className="rounded-[10px] border px-3.5 py-2.5 text-sm outline-none transition-shadow focus:shadow-[0_0_0_3px_rgba(42,86,214,0.15)]"
+              style={{ borderColor: "var(--border)", color: "var(--text-primary)", background: "var(--page)" }}
             />
             <input
               type="number"
@@ -133,8 +206,8 @@ export function InvoiceForm({ onSubmit }: { onSubmit: (input: NewInvoice) => Pro
               placeholder="Rate"
               value={item.rate}
               onChange={(e) => updateItem(i, { rate: Number(e.target.value) })}
-              className="rounded-md border px-3 py-2 text-sm outline-none"
-              style={{ borderColor: "var(--border)", color: "var(--text-primary)" }}
+              className="rounded-[10px] border px-3.5 py-2.5 text-sm outline-none transition-shadow focus:shadow-[0_0_0_3px_rgba(42,86,214,0.15)]"
+              style={{ borderColor: "var(--border)", color: "var(--text-primary)", background: "var(--page)" }}
             />
             <button
               type="button"
@@ -171,5 +244,13 @@ export function InvoiceForm({ onSubmit }: { onSubmit: (input: NewInvoice) => Pro
         </button>
       </div>
     </form>
+  );
+}
+
+function SparkleIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+      <path d="M6 1l1 3 3 1-3 1-1 3-1-3-3-1 3-1 1-3Z" fill="currentColor" />
+    </svg>
   );
 }

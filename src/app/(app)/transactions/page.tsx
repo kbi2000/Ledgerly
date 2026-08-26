@@ -14,7 +14,7 @@ export default function TransactionsPage() {
           Transactions
         </h1>
         <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-          Record income and expenses. Use auto-categorize to let AI suggest a category.
+          Record income and expenses, or scan a receipt photo to fill the form automatically.
         </p>
       </div>
 
