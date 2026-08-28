@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "@/lib/categories";
+import { categoriesFor } from "@/lib/categories";
 import { callGemini } from "@/lib/gemini";
+import type { BusinessType } from "@/lib/types";
 
 export async function POST(req: NextRequest) {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -11,7 +12,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { description, amount, type } = await req.json();
+  const { description, amount, type, businessType } = await req.json();
   if (typeof description !== "string" || !description.trim()) {
     return NextResponse.json({ error: "description is required" }, { status: 400 });
   }
@@ -19,7 +20,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "type must be 'income' or 'expense'" }, { status: 400 });
   }
 
-  const categories = type === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  const categories = categoriesFor(type, businessType as BusinessType | undefined);
 
   const result = await callGemini({
     apiKey,

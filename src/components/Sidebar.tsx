@@ -9,6 +9,7 @@ const LINKS = [
   { href: "/dashboard", label: "Dashboard", icon: DashboardIcon },
   { href: "/transactions", label: "Transactions", icon: TransactionsIcon },
   { href: "/invoices", label: "Invoices", icon: InvoicesIcon },
+  { href: "/settings", label: "Settings", icon: SettingsIcon },
 ];
 
 export function Sidebar() {
@@ -114,6 +115,20 @@ function InvoicesIcon({ active }: { active: boolean }) {
         strokeLinejoin="round"
       />
       <path d="M5.5 8h5M5.5 10.5h5M5.5 5.5h2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function SettingsIcon({ active }: { active: boolean }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" opacity={active ? 1 : 0.8}>
+      <circle cx="8" cy="8" r="2.2" stroke="currentColor" strokeWidth="1.4" />
+      <path
+        d="M8 1.8v1.6M8 12.6v1.6M14.2 8h-1.6M3.4 8H1.8M12.3 3.7l-1.1 1.1M4.8 11.1l-1.1 1.1M12.3 12.3l-1.1-1.1M4.8 4.9 3.7 3.7"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }

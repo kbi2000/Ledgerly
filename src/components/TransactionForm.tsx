@@ -2,7 +2,7 @@
 
 import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { categoriesFor } from "@/lib/categories";
-import type { NewTransaction, TransactionType } from "@/lib/types";
+import type { BusinessType, NewTransaction, TransactionType } from "@/lib/types";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -20,13 +20,15 @@ function fileToBase64(file: File): Promise<string> {
 
 export function TransactionForm({
   onSubmit,
+  businessType = "other",
 }: {
   onSubmit: (input: NewTransaction) => Promise<void>;
+  businessType?: BusinessType;
 }) {
   const [type, setType] = useState<TransactionType>("expense");
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState(categoriesFor("expense")[0]);
+  const [category, setCategory] = useState(categoriesFor("expense", businessType)[0]);
   const [date, setDate] = useState(today());
   const [submitting, setSubmitting] = useState(false);
   const [categorizing, setCategorizing] = useState(false);
@@ -36,7 +38,7 @@ export function TransactionForm({
 
   function changeType(next: TransactionType) {
     setType(next);
-    setCategory(categoriesFor(next)[0]);
+    setCategory(categoriesFor(next, businessType)[0]);
   }
 
   async function handleAutoCategorize() {
@@ -47,7 +49,7 @@ export function TransactionForm({
       const res = await fetch("/api/categorize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description, amount: Number(amount) || undefined, type }),
+        body: JSON.stringify({ description, amount: Number(amount) || undefined, type, businessType }),
       });
       const data = await res.json();
       if (res.ok && data.category) {
@@ -73,7 +75,7 @@ export function TransactionForm({
       const res = await fetch("/api/scan-receipt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageBase64, mimeType: file.type }),
+        body: JSON.stringify({ imageBase64, mimeType: file.type, businessType }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -81,7 +83,7 @@ export function TransactionForm({
         setDescription(data.description);
         setAmount(String(data.amount));
         setDate(data.date);
-        setCategory(data.category);
+        setCategory(categoriesFor("expense", businessType).includes(data.category) ? data.category : "Other");
       } else {
         setAiNote(data.error ?? "Couldn't read that receipt.");
       }
@@ -207,7 +209,7 @@ export function TransactionForm({
               className="flex-1 rounded-[10px] border px-3.5 py-2.5 text-sm outline-none"
               style={{ borderColor: "var(--border)", color: "var(--text-primary)", background: "var(--page)" }}
             >
-              {categoriesFor(type).map((c) => (
+              {categoriesFor(type, businessType).map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>

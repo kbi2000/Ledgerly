@@ -1,5 +1,5 @@
 import type { Invoice, Transaction } from "@/lib/types";
-import { invoiceTotal } from "@/lib/types";
+import { invoiceTotal, isEffectivelyOverdue } from "@/lib/types";
 
 function monthKey(iso: string) {
   return iso.slice(0, 7);
@@ -50,9 +50,7 @@ export function computeBusinessMetrics(transactions: Transaction[], invoices: In
       pctOfInvoicedRevenue: totalInvoiced > 0 ? round2((amount / totalInvoiced) * 100) : 0,
     }));
 
-  const overdue = invoices.filter(
-    (inv) => inv.status === "overdue" || (inv.status === "sent" && inv.dueDate < today)
-  );
+  const overdue = invoices.filter((inv) => isEffectivelyOverdue(inv, today));
   const overdueAmount = round2(overdue.reduce((s, inv) => s + invoiceTotal(inv), 0));
 
   return {

@@ -9,11 +9,14 @@ export function StatTile({
   value,
   tone = "neutral",
   icon,
+  deltaPct,
 }: {
   label: string;
   value: number;
   tone?: "neutral" | "good" | "bad";
   icon?: React.ReactNode;
+  /** % change vs. the prior comparable period; positive is up, negative is down. */
+  deltaPct?: number | null;
 }) {
   const color =
     tone === "good"
@@ -46,6 +49,14 @@ export function StatTile({
       >
         {currency.format(value)}
       </p>
+      {typeof deltaPct === "number" && Number.isFinite(deltaPct) && (
+        <p
+          className="mt-1.5 text-xs font-medium"
+          style={{ color: deltaPct >= 0 ? "var(--success-text)" : "var(--status-critical)" }}
+        >
+          {deltaPct >= 0 ? "▲" : "▼"} {Math.abs(deltaPct).toFixed(1)}% vs. prior period
+        </p>
+      )}
     </div>
   );
 }

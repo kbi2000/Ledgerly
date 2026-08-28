@@ -1,11 +1,13 @@
 "use client";
 
 import { useInvoices } from "@/hooks/useInvoices";
+import { useBusinessProfile } from "@/hooks/useBusinessProfile";
 import { InvoiceForm } from "@/components/InvoiceForm";
 import { InvoiceTable } from "@/components/InvoiceTable";
 
 export default function InvoicesPage() {
   const { invoices, addInvoice, setInvoiceStatus, removeInvoice } = useInvoices();
+  const { profile } = useBusinessProfile();
 
   return (
     <div className="flex flex-col gap-6">
@@ -24,7 +26,12 @@ export default function InvoicesPage() {
         className="rounded-[var(--radius-lg)] border p-5"
         style={{ background: "var(--surface-1)", borderColor: "var(--border)", boxShadow: "var(--shadow-sm)" }}
       >
-        <InvoiceTable invoices={invoices} onStatusChange={setInvoiceStatus} onDelete={removeInvoice} />
+        <InvoiceTable
+          invoices={invoices}
+          onStatusChange={setInvoiceStatus}
+          onDelete={removeInvoice}
+          businessName={profile.businessName}
+        />
       </div>
     </div>
   );

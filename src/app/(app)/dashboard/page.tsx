@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useTransactions } from "@/hooks/useTransactions";
 import { useInvoices } from "@/hooks/useInvoices";
+import { useBusinessProfile } from "@/hooks/useBusinessProfile";
 import { StatTile } from "@/components/StatTile";
 import { CashFlowChart, type CashFlowPoint } from "@/components/charts/CashFlowChart";
 import {
@@ -12,7 +13,11 @@ import {
 import { SmartAlerts } from "@/components/SmartAlerts";
 import { AskBooksChat } from "@/components/AskBooksChat";
 import { BusinessAdvisor } from "@/components/BusinessAdvisor";
+import { CashFlowForecast } from "@/components/CashFlowForecast";
+import { DateRangeSelect } from "@/components/DateRangeSelect";
 import { computeBusinessMetrics } from "@/lib/businessMetrics";
+import { getComparisonRange, getPresetRange, inRange, type DateRangePreset } from "@/lib/dateRanges";
+import type { Transaction } from "@/lib/types";
 
 function monthKey(iso: string) {
   return iso.slice(0, 7); // yyyy-mm
@@ -26,12 +31,49 @@ function monthLabel(key: string) {
   });
 }
 
+function sumByType(transactions: Transaction[]) {
+  let income = 0;
+  let expense = 0;
+  for (const t of transactions) {
+    if (t.type === "income") income += t.amount;
+    else expense += t.amount;
+  }
+  return { income, expense };
+}
+
+function deltaPct(current: number, prior: number): number | null {
+  if (prior === 0) return current === 0 ? 0 : null;
+  return ((current - prior) / Math.abs(prior)) * 100;
+}
+
 export default function DashboardPage() {
   const { transactions, loading } = useTransactions();
   const { invoices } = useInvoices();
+  const { profile } = useBusinessProfile();
   const [insight, setInsight] = useState<string | null>(null);
   const [insightLoading, setInsightLoading] = useState(false);
   const [insightError, setInsightError] = useState<string | null>(null);
+  const [preset, setPreset] = useState<DateRangePreset>("all-time");
+
+  const range = useMemo(
+    () => getPresetRange(preset, profile.fiscalYearStartMonth),
+    [preset, profile.fiscalYearStartMonth]
+  );
+  const comparisonRange = useMemo(() => getComparisonRange(range), [range]);
+
+  const filteredTransactions = useMemo(
+    () => transactions.filter((t) => inRange(t.date, range)),
+    [transactions, range]
+  );
+  const filteredInvoices = useMemo(
+    () => invoices.filter((inv) => inRange(inv.issueDate, range)),
+    [invoices, range]
+  );
+
+  const priorTransactions = useMemo(
+    () => (comparisonRange ? transactions.filter((t) => inRange(t.date, comparisonRange)) : []),
+    [transactions, comparisonRange]
+  );
 
   const { totalIncome, totalExpense, cashFlow, byCategory } = useMemo(() => {
     let income = 0;
@@ -39,7 +81,7 @@ export default function DashboardPage() {
     const byMonth = new Map<string, { income: number; expense: number }>();
     const byCat = new Map<string, number>();
 
-    for (const t of transactions) {
+    for (const t of filteredTransactions) {
       const key = monthKey(t.date);
       const bucket = byMonth.get(key) ?? { income: 0, expense: 0 };
       if (t.type === "income") {
@@ -63,11 +105,15 @@ export default function DashboardPage() {
     }));
 
     return { totalIncome: income, totalExpense: expense, cashFlow, byCategory };
-  }, [transactions]);
+  }, [filteredTransactions]);
+
+  const priorTotals = useMemo(() => sumByType(priorTransactions), [priorTransactions]);
+  const net = totalIncome - totalExpense;
+  const priorNet = priorTotals.income - priorTotals.expense;
 
   const metrics = useMemo(
-    () => computeBusinessMetrics(transactions, invoices),
-    [transactions, invoices]
+    () => computeBusinessMetrics(filteredTransactions, filteredInvoices),
+    [filteredTransactions, filteredInvoices]
   );
 
   async function generateInsight() {
@@ -82,7 +128,7 @@ export default function DashboardPage() {
           totalIncome,
           totalExpense,
           byCategory: Object.fromEntries(byCategory.map((c) => [c.category, c.amount])),
-          periodLabel: "all recorded transactions",
+          periodLabel: range.label,
         }),
       });
       const data = await res.json();
@@ -98,7 +144,6 @@ export default function DashboardPage() {
     }
   }
 
-  const net = totalIncome - totalExpense;
   const netCurrency = new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
@@ -107,31 +152,51 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="flex flex-col gap-1">
-        <p className="text-sm font-medium" style={{ color: "var(--text-muted)" }}>
-          Net position
-        </p>
-        <p
-          className="text-5xl leading-none font-semibold tracking-tight"
-          style={{
-            color: net >= 0 ? "var(--text-primary)" : "var(--status-critical)",
-            fontVariantNumeric: "tabular-nums",
-          }}
-        >
-          {netCurrency.format(net)}
-        </p>
-        <p className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>
-          Across {transactions.length} recorded transaction{transactions.length === 1 ? "" : "s"}.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <p className="text-sm font-medium" style={{ color: "var(--text-muted)" }}>
+            Net position · {range.label}
+          </p>
+          <p
+            className="text-5xl leading-none font-semibold tracking-tight"
+            style={{
+              color: net >= 0 ? "var(--text-primary)" : "var(--status-critical)",
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {netCurrency.format(net)}
+          </p>
+          <p className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>
+            Across {filteredTransactions.length} recorded transaction{filteredTransactions.length === 1 ? "" : "s"}.
+          </p>
+        </div>
+        <DateRangeSelect value={preset} onChange={setPreset} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatTile label="Total income" value={totalIncome} tone="good" icon={<ArrowIcon direction="up" />} />
-        <StatTile label="Total expense" value={totalExpense} icon={<ArrowIcon direction="down" />} />
-        <StatTile label="Net" value={net} tone={net >= 0 ? "good" : "bad"} icon={<ScaleIcon />} />
+        <StatTile
+          label="Total income"
+          value={totalIncome}
+          tone="good"
+          icon={<ArrowIcon direction="up" />}
+          deltaPct={comparisonRange ? deltaPct(totalIncome, priorTotals.income) : null}
+        />
+        <StatTile
+          label="Total expense"
+          value={totalExpense}
+          icon={<ArrowIcon direction="down" />}
+          deltaPct={comparisonRange ? deltaPct(totalExpense, priorTotals.expense) : null}
+        />
+        <StatTile
+          label="Net"
+          value={net}
+          tone={net >= 0 ? "good" : "bad"}
+          icon={<ScaleIcon />}
+          deltaPct={comparisonRange ? deltaPct(net, priorNet) : null}
+        />
       </div>
 
-      <SmartAlerts transactions={transactions} />
+      <SmartAlerts transactions={filteredTransactions} />
 
       <div
         className="relative overflow-hidden rounded-[var(--radius-lg)] border p-5"
@@ -155,7 +220,7 @@ export default function DashboardPage() {
           </div>
           <button
             onClick={generateInsight}
-            disabled={insightLoading || loading || transactions.length === 0}
+            disabled={insightLoading || loading || filteredTransactions.length === 0}
             className="rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors disabled:opacity-50"
             style={{ borderColor: "var(--border)", color: "var(--brand-1)" }}
           >
@@ -174,7 +239,7 @@ export default function DashboardPage() {
         )}
         {!insight && !insightError && (
           <p className="relative text-sm" style={{ color: "var(--text-muted)" }}>
-            Generate a plain-language summary of trends in your income and spending.
+            Generate a plain-language summary of trends in your income and spending for {range.label.toLowerCase()}.
           </p>
         )}
       </div>
@@ -200,9 +265,11 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <BusinessAdvisor metrics={metrics} hasData={transactions.length > 0 || invoices.length > 0} />
+      <CashFlowForecast metrics={metrics} businessType={profile.businessType} />
 
-      <AskBooksChat transactions={transactions} />
+      <BusinessAdvisor metrics={metrics} hasData={filteredTransactions.length > 0 || filteredInvoices.length > 0} />
+
+      <AskBooksChat transactions={filteredTransactions} />
     </div>
   );
 }
